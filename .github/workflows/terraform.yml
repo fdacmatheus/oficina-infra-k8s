@@ -1,0 +1,129 @@
+name: Terraform · Cluster Kubernetes
+
+on:
+  push:
+    branches: [main, homolog]
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [main, homolog]
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: 'Executar terraform destroy em vez de apply'
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.9.8
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Formatacao
+        run: terraform fmt -check -recursive
+
+      - name: Init sem backend
+        run: terraform init -backend=false
+
+      - name: Validar
+        run: terraform validate
+
+      - name: Validar JSON dos dashboards
+        run: |
+          for f in dashboards/*.json; do
+            jq empty "$f" || { echo "JSON invalido: $f"; exit 1; }
+            echo "ok: $f"
+          done
+
+  plan:
+    name: Plan
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - run: terraform init -input=false
+
+      - name: Plan
+        run: terraform plan -input=false -no-color 2>&1 | tee plan.txt
+
+      - name: Comentar o plan no PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('plan.txt', 'utf8');
+            const body = `#### Terraform Plan — Cluster Kubernetes\n\n<details><summary>Ver plano</summary>\n\n\`\`\`hcl\n${plan.slice(-60000)}\n\`\`\`\n\n</details>`;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+  apply:
+    name: Apply
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.ref_name == 'main' && 'producao' || 'homologacao' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - run: terraform init -input=false
+
+      - name: Apply
+        if: ${{ !inputs.destroy }}
+        run: terraform apply -input=false -auto-approve
+
+      - name: Destroy
+        if: ${{ inputs.destroy }}
+        run: terraform destroy -input=false -auto-approve
+
+      - name: Verificar o cluster
+        if: ${{ !inputs.destroy }}
+        run: |
+          aws eks update-kubeconfig --name "$(terraform output -raw cluster_name)" --region "$AWS_REGION"
+          kubectl get nodes
+          kubectl -n monitoring get pods
+          echo "### Cluster provisionado" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "API Gateway: $(terraform output -raw api_gateway_url)" >> $GITHUB_STEP_SUMMARY
+          kubectl get nodes >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

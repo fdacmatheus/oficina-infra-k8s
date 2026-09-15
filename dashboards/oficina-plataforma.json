@@ -1,0 +1,117 @@
+{
+  "title": "Oficina · Plataforma",
+  "uid": "oficina-plataforma",
+  "tags": ["oficina", "plataforma"],
+  "timezone": "America/Sao_Paulo",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Uptime da API",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "avg_over_time(up{job=\"oficina-api\"}[24h]) * 100", "legendFormat": "Disponibilidade" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 2, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 95 }, { "color": "green", "value": 99 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Réplicas ativas (HPA)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"oficina\"}", "legendFormat": "Atual" },
+        { "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"oficina\"}", "legendFormat": "Máximo" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Latência p95",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"oficina-api\"}[5m])))", "legendFormat": "p95" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 1 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Taxa de erro 5xx",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{job=\"oficina-api\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{job=\"oficina-api\"}[5m])), 0.001) * 100", "legendFormat": "5xx" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 2, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 }] } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latência das APIs por rota",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{job=\"oficina-api\"}[5m])))", "legendFormat": "p95 {{route}}" },
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"oficina-api\"}[5m])))", "legendFormat": "p50 geral" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Throughput por código de status",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        { "expr": "sum by (status) (rate(http_requests_total{job=\"oficina-api\"}[5m]))", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU dos pods",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
+      "targets": [
+        { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"oficina\",container!=\"\"}[5m]))", "legendFormat": "{{pod}}" },
+        { "expr": "sum(kube_pod_container_resource_limits{namespace=\"oficina\",resource=\"cpu\"})", "legendFormat": "limite" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memória dos pods",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 },
+      "targets": [
+        { "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"oficina\",container!=\"\"})", "legendFormat": "{{pod}}" },
+        { "expr": "sum(kube_pod_container_resource_limits{namespace=\"oficina\",resource=\"memory\"})", "legendFormat": "limite" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Escalabilidade — réplicas vs. CPU",
+      "description": "Demonstração do HPA reagindo a carga.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"oficina\"}", "legendFormat": "réplicas" },
+        { "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"oficina\",container!=\"\"}[2m])) * 100", "legendFormat": "CPU média %" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 2 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Healthchecks — probes reiniciando pods",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "targets": [
+        { "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"oficina\"}[15m]))", "legendFormat": "{{pod}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Autenticação serverless",
+      "description": "Invocações e erros da Lambda de validação de CPF, via CloudWatch.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "targets": [
+        { "expr": "sum(rate(oficina_auth_tentativas_total[5m])) * 60", "legendFormat": "tentativas/min" },
+        { "expr": "sum(rate(oficina_auth_falhas_total[5m])) * 60", "legendFormat": "falhas/min" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ]
+}

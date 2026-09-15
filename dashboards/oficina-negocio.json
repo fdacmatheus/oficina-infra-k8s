@@ -1,0 +1,97 @@
+{
+  "title": "Oficina · Negócio",
+  "uid": "oficina-negocio",
+  "tags": ["oficina", "negocio"],
+  "timezone": "America/Sao_Paulo",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Ordens de serviço abertas (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(oficina_ordens_servico_criadas_total[24h]))", "legendFormat": "OS" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "OS em execução agora",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(oficina_ordens_servico_por_status{status=\"EM_EXECUCAO\"})", "legendFormat": "Em execução" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "stat",
+      "title": "Aguardando aprovação",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(oficina_ordens_servico_por_status{status=\"AGUARDANDO_APROVACAO\"})", "legendFormat": "Aguardando" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 10 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Falhas de integração (1h)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(oficina_integracao_falhas_total[1h]))", "legendFormat": "Falhas" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Volume diário de ordens de serviço",
+      "description": "Ordens abertas por dia, exigência do Tech Challenge.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        { "expr": "sum(increase(oficina_ordens_servico_criadas_total[1d]))", "legendFormat": "OS abertas" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tempo médio de execução por status",
+      "description": "Duração média que uma OS permanece em cada status: Diagnóstico, Execução e Finalização.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(oficina_ordem_servico_duracao_status_segundos_sum[30m])) / sum by (status) (rate(oficina_ordem_servico_duracao_status_segundos_count[30m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "piechart",
+      "title": "Distribuição das OS por status",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
+      "targets": [
+        { "expr": "sum by (status) (oficina_ordens_servico_por_status)", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Transições de status por minuto",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 },
+      "targets": [
+        { "expr": "sum by (para) (rate(oficina_ordem_servico_transicoes_total[5m])) * 60", "legendFormat": "→ {{para}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Erros e falhas nas integrações",
+      "description": "Falhas no envio de e-mail de notificação e no webhook de orçamento.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 },
+      "targets": [
+        { "expr": "sum by (integracao) (rate(oficina_integracao_falhas_total[5m])) * 60", "legendFormat": "{{integracao}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } }
+    }
+  ]
+}
