@@ -136,6 +136,15 @@ resource "aws_apigatewayv2_route" "publico" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# Autenticacao administrativa servida pela propria aplicacao. Precisa ser
+# publica no gateway: exigir token para obter um token deixaria o operador sem
+# nenhum caminho de entrada.
+resource "aws_apigatewayv2_route" "auth_aplicacao" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "POST /api/auth/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 # Healthcheck e documentacao, usados pelo smoke test do pipeline.
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.this.id
