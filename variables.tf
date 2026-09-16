@@ -76,3 +76,9 @@ variable "grafana_admin_password" {
   default     = "oficina-admin"
   sensitive   = true
 }
+
+variable "jwt_secret_name" {
+  description = "Nome do secret com o segredo de assinatura do JWT, publicado pelo repositorio oficina-lambda-auth. Vazio usa valores de desenvolvimento."
+  type        = string
+  default     = "oficina/auth/jwt"
+}

@@ -189,3 +189,23 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_cluster" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
 }
+
+# ---------------------------------------------------------------------------
+# Acesso do Network Load Balancer aos nodes
+#
+# O Service do tipo LoadBalancer sem o AWS Load Balancer Controller usa o modo
+# "instance": o NLB entrega o trafego no NodePort de cada node. O security
+# group gerenciado do EKS so libera comunicacao entre nodes, entao tanto o
+# health check quanto o trafego chegam bloqueados e os alvos ficam unhealthy.
+#
+# A faixa de NodePort e liberada para dentro da VPC — o NLB e interno e nao
+# tem rota a partir da internet.
+# ---------------------------------------------------------------------------
+resource "aws_vpc_security_group_ingress_rule" "nodeport_from_vpc" {
+  security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  description       = "NodePort a partir do NLB interno"
+  cidr_ipv4         = data.aws_vpc.default.cidr_block
+  from_port         = 30000
+  to_port           = 32767
+  ip_protocol       = "tcp"
+}

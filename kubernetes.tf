@@ -35,6 +35,43 @@ resource "kubernetes_secret" "database" {
 }
 
 # ---------------------------------------------------------------------------
+# Segredo de assinatura do JWT
+# Publicado pelo repositorio oficina-lambda-auth. A aplicacao precisa do mesmo
+# segredo para que o token emitido pela function serverless seja aceito pelos
+# guards do NestJS.
+# ---------------------------------------------------------------------------
+data "aws_secretsmanager_secret" "jwt" {
+  count = var.jwt_secret_name == "" ? 0 : 1
+  name  = var.jwt_secret_name
+}
+
+data "aws_secretsmanager_secret_version" "jwt" {
+  count     = var.jwt_secret_name == "" ? 0 : 1
+  secret_id = data.aws_secretsmanager_secret.jwt[0].id
+}
+
+resource "kubernetes_secret" "api" {
+  metadata {
+    name      = "oficina-api-secrets"
+    namespace = kubernetes_namespace.oficina.metadata[0].name
+  }
+
+  data = var.jwt_secret_name == "" ? {
+    JWT_SECRET         = "desenvolvimento-sem-secrets-manager"
+    JWT_REFRESH_SECRET = "desenvolvimento-sem-secrets-manager"
+    } : merge(
+    jsondecode(data.aws_secretsmanager_secret_version.jwt[0].secret_string),
+    {
+      # O refresh token e exclusivo da autenticacao administrativa da
+      # aplicacao e nao trafega pela function serverless.
+      JWT_REFRESH_SECRET = sha256(jsondecode(data.aws_secretsmanager_secret_version.jwt[0].secret_string)["JWT_SECRET"])
+    }
+  )
+
+  type = "Opaque"
+}
+
+# ---------------------------------------------------------------------------
 # Exposicao da aplicacao
 # O Service pertence a camada de infraestrutura porque e ele quem provisiona o
 # Network Load Balancer consumido pelo API Gateway. O Deployment e o HPA
@@ -145,13 +182,13 @@ resource "helm_release" "kube_prometheus_stack" {
           limits   = { memory = "1Gi" }
         }
 
+        # Sem volume persistente: o driver EBS CSI exige a policy
+        # AmazonEBSCSIDriverPolicy na role dos nodes, e o AWS Academy Learner
+        # Lab nao concede iam:AttachRolePolicy. Com retencao de 6 horas o
+        # armazenamento efemero atende — a serie historica longa nao faz parte
+        # do escopo do desafio.
         storageSpec = {
-          volumeClaimTemplate = {
-            spec = {
-              accessModes = ["ReadWriteOnce"]
-              resources   = { requests = { storage = "8Gi" } }
-            }
-          }
+          emptyDir = { medium = "" }
         }
       }
     })
