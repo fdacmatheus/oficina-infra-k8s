@@ -158,6 +158,21 @@ resource "aws_apigatewayv2_route" "docs" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# /docs/{proxy+} exige algo depois da barra, entao a URL que a pessoa digita
+# — sem barra no fim — nao casava com nenhuma rota.
+resource "aws_apigatewayv2_route" "docs_raiz" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "ANY /docs"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
+# Especificacao OpenAPI, usada para importar as APIs em outras ferramentas.
+resource "aws_apigatewayv2_route" "docs_json" {
+  api_id    = aws_apigatewayv2_api.this.id
+  route_key = "ANY /docs-json"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 # Demais rotas da aplicacao: protegidas pelo authorizer.
 resource "aws_apigatewayv2_route" "protegida" {
   api_id    = aws_apigatewayv2_api.this.id
