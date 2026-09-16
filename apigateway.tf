@@ -79,11 +79,11 @@ resource "aws_apigatewayv2_integration" "api" {
 # Emissao de token a partir do CPF, implementada no repositorio
 # oficina-lambda-auth.
 resource "aws_apigatewayv2_integration" "auth" {
-  count = var.lambda_token_arn == "" ? 0 : 1
+  count = local.lambda_token_arn == "" ? 0 : 1
 
   api_id                 = aws_apigatewayv2_api.this.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = "arn:aws:apigateway:${var.region}:lambda:path/2015-03-31/functions/${var.lambda_token_arn}/invocations"
+  integration_uri        = "arn:aws:apigateway:${var.region}:lambda:path/2015-03-31/functions/${local.lambda_token_arn}/invocations"
   payload_format_version = "2.0"
   timeout_milliseconds   = 10000
 }
@@ -95,7 +95,7 @@ resource "aws_apigatewayv2_integration" "auth" {
 # HS256, a validacao e feita por um authorizer Lambda do tipo REQUEST.
 # ---------------------------------------------------------------------------
 resource "aws_apigatewayv2_authorizer" "jwt" {
-  count = var.lambda_authorizer_arn == "" ? 0 : 1
+  count = local.lambda_authorizer_arn == "" ? 0 : 1
 
   api_id          = aws_apigatewayv2_api.this.id
   authorizer_type = "REQUEST"
@@ -103,7 +103,7 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
   # O authorizer exige o ARN de invocacao, nao o ARN da funcao; ele e montado
   # a partir do ARN recebido para que o repositorio da Lambda precise exportar
   # apenas um valor.
-  authorizer_uri = "arn:aws:apigateway:${var.region}:lambda:path/2015-03-31/functions/${var.lambda_authorizer_arn}/invocations"
+  authorizer_uri = "arn:aws:apigateway:${var.region}:lambda:path/2015-03-31/functions/${local.lambda_authorizer_arn}/invocations"
 
   identity_sources                  = ["$request.header.Authorization"]
   name                              = "${var.project}-jwt-authorizer"
@@ -121,7 +121,7 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
 
 # Emissao de token: publica por definicao, e a porta de entrada da autenticacao.
 resource "aws_apigatewayv2_route" "auth" {
-  count = var.lambda_token_arn == "" ? 0 : 1
+  count = local.lambda_token_arn == "" ? 0 : 1
 
   api_id    = aws_apigatewayv2_api.this.id
   route_key = "POST /auth"
@@ -155,27 +155,27 @@ resource "aws_apigatewayv2_route" "protegida" {
   route_key = "ANY /api/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 
-  authorization_type = var.lambda_authorizer_arn == "" ? "NONE" : "CUSTOM"
-  authorizer_id      = var.lambda_authorizer_arn == "" ? null : aws_apigatewayv2_authorizer.jwt[0].id
+  authorization_type = local.lambda_authorizer_arn == "" ? "NONE" : "CUSTOM"
+  authorizer_id      = local.lambda_authorizer_arn == "" ? null : aws_apigatewayv2_authorizer.jwt[0].id
 }
 
 # Permite ao API Gateway invocar as funcoes Lambda.
 resource "aws_lambda_permission" "authorizer" {
-  count = var.lambda_authorizer_arn == "" ? 0 : 1
+  count = local.lambda_authorizer_arn == "" ? 0 : 1
 
   statement_id  = "AllowAPIGatewayInvokeAuthorizer"
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda_authorizer_arn
+  function_name = local.lambda_authorizer_arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.this.execution_arn}/authorizers/${aws_apigatewayv2_authorizer.jwt[0].id}"
 }
 
 resource "aws_lambda_permission" "token" {
-  count = var.lambda_token_arn == "" ? 0 : 1
+  count = local.lambda_token_arn == "" ? 0 : 1
 
   statement_id  = "AllowAPIGatewayInvokeToken"
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda_token_arn
+  function_name = local.lambda_token_arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.this.execution_arn}/*/*"
 }
