@@ -35,6 +35,37 @@ data "aws_iam_role" "node" {
   name = var.eks_node_role_name
 }
 
+# Estado do repositorio da Lambda: ARNs das funcoes de autenticacao.
+#
+# Le-los do state remoto, e nao de variaveis passadas na linha de comando, e o
+# que torna o pipeline autossuficiente. Com os ARNs vindo de -var, um apply
+# disparado pelo CI cairia no default vazio, o count das rotas de autenticacao
+# iria a zero e o Terraform destruiria o authorizer — removendo a protecao das
+# rotas sensiveis sem que ninguem pedisse.
+data "terraform_remote_state" "lambda_auth" {
+  backend = "s3"
+
+  config = {
+    bucket = "oficina-tfstate-679445922616"
+    key    = "lambda-auth/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+locals {
+  # A variavel, quando informada, tem precedencia — util para validar a
+  # conectividade antes de somar a camada de autenticacao.
+  lambda_token_arn = coalesce(
+    var.lambda_token_arn,
+    try(data.terraform_remote_state.lambda_auth.outputs.token_function_arn, ""),
+  )
+
+  lambda_authorizer_arn = coalesce(
+    var.lambda_authorizer_arn,
+    try(data.terraform_remote_state.lambda_auth.outputs.authorizer_function_arn, ""),
+  )
+}
+
 # Estado do repositorio do banco: endpoint, security group e ARN do secret.
 data "terraform_remote_state" "database" {
   backend = "s3"
