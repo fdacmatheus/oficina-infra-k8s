@@ -83,6 +83,14 @@ resource "kubernetes_service" "api" {
     name      = "oficina-api"
     namespace = kubernetes_namespace.oficina.metadata[0].name
 
+    # O ServiceMonitor seleciona pelo label do Service, nao do pod. Sem ele o
+    # Prometheus nunca descobre o alvo e os paineis de negocio ficam vazios.
+    labels = {
+      app                         = "oficina-api"
+      "app.kubernetes.io/name"    = "oficina-api"
+      "app.kubernetes.io/part-of" = var.project
+    }
+
     annotations = {
       "service.beta.kubernetes.io/aws-load-balancer-type"             = "nlb"
       "service.beta.kubernetes.io/aws-load-balancer-internal"         = "true"
